@@ -48,7 +48,7 @@ int main() {
     }
 
     for(int i = 0; i < 3; i++) {
-        printf("i = %d, pid = %d\n", i, getpid());
+        printf("i = %d, pid = %d \n", i, getpid());
     }
 
 
