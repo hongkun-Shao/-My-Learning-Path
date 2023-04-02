@@ -71,6 +71,27 @@ pid_t fork(void);
 
 &emsp;&emsp;此外，创建子进程后，父进程中打开的文件描述符默认在子进程中也是打开的，且文件描述符的引用计数加1。不仅如此，父进程的用户根目录、当前工作目录等变量的引用计数均会加1。
 
+## 三.exec函数族
+&emsp;&emsp;exec 函数族的作用是根据指定的文件名找到可执行文件，并用它来取代调用进程的内容，换句话说，就是在调用进程内部执行一个可执行文件。
+```
+#include＜unistd.h＞
+extern char**environ;
+int execl(const char*path,const char*arg,...);
+int execlp(const char*file,const char*arg,...);
+int execle(const char*path,const char*arg,...,char*const envp[]);
+int execv(const char*path,char*const argv[]);
+int execvp(const char*file,char*const argv[]);
+int execve(const char*path,char*const argv[],char*const envp[]);
+l(list) 参数地址列表，以空指针结尾
+v(vector) 存有各参数地址的指针数组的地址
+p(path) 按 PATH 环境变量指定的目录搜索可执行文件
+e(environment) 存有环境变量字符串地址的指针数组的地址
+```
+&emsp;&emsp;path参数指定可执行文件的完整路径，file参数可以接受文件名，该文件的具体位置则在环境变量PATH中搜寻。arg接受可变参数，argv则接受参数数组，它们都会被传递给新程序（path或file指定的程序）的main函数。envp参数用于设置新程序的环境变量。如果未设置它，则新程序将使用由全局变量environ指定的环境变量。  
+
+&emsp;&emsp;一般情况下，exec函数是不返回的，除非出错。它出错时返回-1，并设置errno。如果没出错，则原程序中exec调用之后的代码都不会执行，因为此时原程序已经被exec的参数指定的程序完全替换（包括代码和数据）。  
+
+&emsp;&emsp;exec函数不会关闭原程序打开的文件描述符，除非该文件描述符被设置了类似SOCK_CLOEXEC的属性。
 
 
 
