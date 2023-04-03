@@ -125,7 +125,42 @@ exit是C的库函数，而_exit是Linux的库函数
 4. 注意：一次wait或waitpid调用只能清理一个子进程，清理多个子进程应使用循环。
 
 
+### 5.wait()和waitpid()函数
+```
+#include＜sys/types.h＞
+#include＜sys/wait.h＞
+pid_t wait(int*stat_loc);
+pid_t waitpid(pid_t pid,int*stat_loc,int options);
+```
+&emsp;&emsp;wait函数将阻塞进程，直到该进程的某个子进程结束运行为止。它
+返回结束运行的子进程的PID，并将该子进程的退出状态信息存储于
+stat_loc参数指向的内存中。sys/wait.h头文件中定义了几个宏来帮助解释子进程的退出状态信息  
 
+&emsp;&emsp;wait函数的阻塞特性显然不是服务器程序期望的，而waitpid函数解
+决了这个问题。waitpid只等待由pid参数指定的子进程。如果pid取值
+为-1，那么它就和wait函数相同，即等待任意一个子进程结束。stat_loc
+参数的含义和wait函数的stat_loc参数相同。options参数可以控制waitpid
+函数的行为。该参数最常用的取值是WNOHANG。当options的取值是
+WNOHANG时，waitpid调用将是非阻塞的：如果pid指定的目标子进程
+还没有结束或意外终止，则waitpid立即返回0；如果目标子进程确实正
+常退出了，则waitpid返回该子进程的PID。waitpid调用失败时返回-1并
+设置errno。
 
+&emsp;&emsp;对waitpid函数而言，我们最好在某个子进程退出之后再
+调用它。那么父进程从何得知某个子进程已经退出了呢？这正是
+SIGCHLD信号的用途。当一个进程结束时，它将给其父进程发送一个
+SIGCHLD信号。因此，我们可以在父进程中捕获SIGCHLD信号，并在
+信号处理函数中调用waitpid函数以“彻底结束”一个子进程
 
-
+```
+SIGCHLD信号的典型处理函数
+static void handle_child(int sig)
+{
+    pid_t pid;
+    int stat;
+    while((pid=waitpid(-1,＆stat,WNOHANG))＞0)
+    {
+    /*对结束的子进程进行善后处理*/
+    }
+}
+```
