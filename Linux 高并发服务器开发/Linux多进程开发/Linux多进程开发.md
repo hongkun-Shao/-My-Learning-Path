@@ -135,13 +135,19 @@ pid_t waitpid(pid_t pid,int*stat_loc,int options);
 &emsp;&emsp;wait函数将阻塞进程，直到该进程的某个子进程结束运行为止。它
 返回结束运行的子进程的PID，并将该子进程的退出状态信息存储于
 stat_loc参数指向的内存中。sys/wait.h头文件中定义了几个宏来帮助解释子进程的退出状态信息  
+* WIFEXITED(status) 非0，进程正常退出
+* WEXITSTATUS(status) 如果上宏为真，获取进程退出的状态（exit的参数）
+* WIFSIGNALED(status) 非0，进程异常终止
+* WTERMSIG(status) 如果上宏为真，获取使进程终止的信号编号
+* WIFSTOPPED(status) 非0，进程处于暂停状态
+* WSTOPSIG(status) 如果上宏为真，获取使进程暂停的信号的编号
+* WIFCONTINUED(status) 非0，进程暂停后已经继续运行
+
 
 &emsp;&emsp;wait函数的阻塞特性显然不是服务器程序期望的，而waitpid函数解
 决了这个问题。waitpid只等待由pid参数指定的子进程。如果pid取值
 为-1，那么它就和wait函数相同，即等待任意一个子进程结束。stat_loc
-参数的含义和wait函数的stat_loc参数相同。options参数可以控制waitpid
-函数的行为。该参数最常用的取值是WNOHANG。当options的取值是
-WNOHANG时，waitpid调用将是非阻塞的：如果pid指定的目标子进程
+参数的含义和wait函数的stat_loc参数相同。options参数可以控制waitpid函数的行为。该参数最常用的取值是WNOHANG。当options的取值是WNOHANG时，waitpid调用将是非阻塞的：如果pid指定的目标子进程
 还没有结束或意外终止，则waitpid立即返回0；如果目标子进程确实正
 常退出了，则waitpid返回该子进程的PID。waitpid调用失败时返回-1并
 设置errno。
@@ -164,3 +170,18 @@ static void handle_child(int sig)
     }
 }
 ```
+
+## 五.进程间通信
+### 1.进程间通信概念
+进程是一个独立的资源分配单元，不同进程（这里所说的进程通常指的是用户进程）之间
+的资源是独立的，没有关联，不能在一个进程中直接访问另一个进程的资源。
+1. 但是，进程不是孤立的，不同的进程需要进行信息的交互和状态的传递等，因此需要进程
+间通信( IPC：Inter Processes Communication )。
+2. 进程间通信的目的：
+    * 数据传输：一个进程需要将它的数据发送给另一个进程。
+    * 通知事件：一个进程需要向另一个或一组进程发送消息，通知它（它们）发生了某种事件（如进程终止时要通知父进程）。
+    * 资源共享：多个进程之间共享同样的资源。为了做到这一点，需要内核提供互斥和同步机制。
+    * 进程控制：有些进程希望完全控制另一个进程的执行（如 Debug 进程），此时控制进程希望能够拦截另一个进程的所有陷入和异常，并能够及时知道它的状态改变。
+
+    
+
