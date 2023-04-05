@@ -183,5 +183,152 @@ static void handle_child(int sig)
     * 资源共享：多个进程之间共享同样的资源。为了做到这一点，需要内核提供互斥和同步机制。
     * 进程控制：有些进程希望完全控制另一个进程的执行（如 Debug 进程），此时控制进程希望能够拦截另一个进程的所有陷入和异常，并能够及时知道它的状态改变。
 
-    
+### 2.进程间通信方式
+1. 同一主机通信
+    * Unix进程间通信方式 有：匿名管道 有名管道 信号
+
+    * System V进程间通信方式和POSIX进程间通信方式 有：消息队列 共享内存 信号量
+2. 不同主机（网络）进程间通信
+    *  Socket
+
+### 3.管道(匿名管道, PIPE)
+管道也叫无名（匿名）管道，它是是 UNIX 系统 IPC（进程间通信）的最古老形式，所有的 UNIX 系统都支持这种通信机制。
+1. 管道的特点
+    * 管道其实是一个在**内核内存中维护的缓冲器**，这个缓冲器的存储能力是有限的，不同的
+操作系统大小不一定相同。
+    * 管道拥有文件的特质：读操作、写操作，匿名管道没有文件实体，有名管道有文件实体，
+但不存储数据。可以按照操作文件的方式对管道进行操作。
+    * 一个管道是一个字节流，使用管道时不存在消息或者消息边界的概念，从管道读取数据
+的进程可以读取任意大小的数据块，而不管写入进程写入管道的数据块的大小是多少。
+    * 通过管道传递的数据是顺序的，从管道中读取出来的字节的顺序和它们被写入管道的顺
+序是完全一样的。
+    * 在管道中的数据的传递方向是单向的，一端用于写入，一端用于读取，管道是**半双工**的。
+    * 从管道读数据是一次性操作，数据一旦被读走，它就从管道中被抛弃，释放空间以便写
+更多的数据，在管道中无法使用 lseek() 来随机的访问数据。
+    * **匿名管道只能在具有公共祖先的进程（父进程与子进程，或者两个兄弟进程，具有亲缘关系）之间使用**。
+    * 管道的数据结构是一个循环队列。
+
+2.匿名管道的使用
+```
+创建匿名管道
+#include <unistd.h>
+int pipe(int pipefd[2]);
+
+查看管道缓冲大小命令
+ulimit –a
+
+查看管道缓冲大小函数
+#include <unistd.h>
+long fpathconf(int fd, int name);
+
+```
+
+### 4.有名管道(FIFO)
+1. 通过命令创建有名管道 `mkfifo 名字`
+2. 通过函数创建有名管道
+```
+#include <sys/types.h>
+#include <sys/stat.h>
+int mkfifo(const char *pathname, mode_t mode);
+```
+3. 一旦使用 mkfifo 创建了一个 FIFO，就可以使用 open 打开它，常见的文件I/O 函数都可用于 fifo。如：close、read、write、unlink 等。
+4. FIFO 严格遵循先进先出（First in First out），对管道及 FIFO 的读总是从开始处返回数据，对它们的写则把数据添加到末尾。它们不支持诸如 lseek() 等文件定位操作。
+
+### 5.内存映射
+内存映射（Memory-mapped I/O）是将磁盘文件的数据映射到内存，用户通过修改
+内存就能修改磁盘文件。
+```
+#include <sys/mman.h>
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+int munmap(void *addr, size_t length);
+
+```
+
+### 6.信号
+1. 概念
+    * 信号是 Linux 进程间通信的最古老的方式之一，是事件发生时对进程的通知机制，有时也
+称之为软件中断，它是在软件层次上对中断机制的一种模拟，是一种异步通信的方式。信号
+可以导致一个正在运行的进程被另一个正在运行的异步进程中断，转而处理某一个突发事件。
+    * 发往进程的诸多信号，通常都是源于内核。引发内核为进程产生信号的各类事件如下：
+        * 对于前台进程，用户可以通过输入特殊的终端字符来给它发送信号。比如输入Ctrl+C 
+通常会给进程发送一个中断信号。
+        * 硬件发生异常，即硬件检测到一个错误条件并通知内核，随即再由内核发送相应信号给
+相关进程。比如执行一条异常的机器语言指令，诸如被 0 除，或者引用了无法访问的
+内存区域。
+        * 系统状态变化，比如 alarm 定时器到期将引起 SIGALRM 信号，进程执行的 CPU 
+时间超限，或者该进程的某个子进程退出。
+        * 运行 kill 命令或调用 kill 函数。
+
+    * 使用信号的两个主要目的是：
+        * 让进程知道已经发生了一个特定的事情。
+        * 强迫进程执行它自己代码中的信号处理程序。
+    * 信号的特点：
+        * 简单
+        * 不能携带大量信息
+        * 满足某个特定条件才发送
+        * 优先级比较高
+    * 查看系统定义的信号列表：kill –l 
+    * 前 31 个信号为常规信号，其余为实时信号。
+    * 查看信号的详细信息：man 7 signal
+    * 信号的 5 中默认处理动作
+        * Term 终止进程
+        * Ign 当前进程忽略掉这个信号
+        * Core 终止进程，并生成一个Core文件
+        * Stop 暂停当前进程
+        * Cont 继续执行当前被暂停的进程
+    * 信号的几种状态：产生、未决、递达
+    * SIGKILL 和 SIGSTOP 信号不能被捕捉、阻塞或者忽略，只能执行默认动作
+
+2. 信号相关函数
+```
+int kill(pid_t pid, int sig);
+int raise(int sig);
+void abort(void);
+unsigned int alarm(unsigned int seconds);
+int setitimer(int which, const struct itimerval *new_val, 
+struct itimerval *old_value);
+```
+
+3. 定时器
+```
+    #include <unistd.h>
+    unsigned int alarm(unsigned int seconds);
+    #include <sys/time.h>
+    int setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value);
+```
+
+4. 信号捕捉信号
+```
+    sighandler_t signal(int signum, sighandler_t handler);
+    int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+```
+
+5. 信号集
+    * 许多信号相关的系统调用都需要能表示一组不同的信号，多个信号可使用一个称之为
+信号集的数据结构来表示，其系统数据类型为 sigset_t。
+    * 在 PCB 中有两个非常重要的信号集。一个称之为 “阻塞信号集” ，另一个称之为
+“未决信号集” 。这两个信号集都是内核使用位图机制来实现的。但操作系统不允许我
+们直接对这两个信号集进行位操作。而需自定义另外一个集合，借助信号集操作函数
+来对 PCB 中的这两个信号集进行修改。
+    * 信号的 “未决” 是一种状态，指的是从信号的产生到信号被处理前的这一段时间。
+    * 信号的 “阻塞” 是一个开关动作，指的是阻止信号被处理，但不是阻止信号产生。
+    * 信号的阻塞就是让系统暂时保留信号留待以后发送。由于另外有办法让系统忽略信号，
+所以一般情况下信号的阻塞只是暂时的，只是为了防止信号打断敏感的操作。
+
+6. 信号集相关的函数
+```
+int sigemptyset(sigset_t *set);
+int sigfillset(sigset_t *set);
+int sigaddset(sigset_t *set, int signum);
+int sigdelset(sigset_t *set, int signum);
+int sigismember(const sigset_t *set, int signum);
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+int sigpending(sigset_t *set);
+```
+7. SIGCHLD信号
+    * SIGCHLD信号产生的条件
+        * 子进程终止时
+        * 子进程接收到 SIGSTOP 信号停止时
+        * 子进程处在停止态，接受到SIGCONT后唤醒时
+    * 以上三种条件都会给父进程发送 SIGCHLD 信号，父进程默认会忽略该信号
 
