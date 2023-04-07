@@ -17,6 +17,8 @@
 #include <string.h>
 #include <unistd.h>
 
+//会因为不同步出现错误的结果
+
 void * callback(void * arg) {
     printf("chid thread id : %ld\n", pthread_self());
     return NULL;
