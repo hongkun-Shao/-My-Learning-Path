@@ -409,3 +409,333 @@ ssize_t write(int fd, const void *buf, size_t count); // 写数据
 ssize_t read(int fd, void *buf, size_t count); // 读数据
 
 ```
+
+## 7.半关闭
+### 2MSL（Maximum Segment Lifetime）
+主动断开连接的一方, 最后进入一个 TIME_WAIT状态, 这个状态会持续: 2msl
+- msl: 官方建议: 2分钟, 实际是30s
+```
+当 TCP 连接主动关闭方接收到被动关闭方发送的 FIN 和最终的 ACK 后，连接的主动关闭方必须处于TIME_WAIT 状态并持续 2MSL 时间。
+这样就能够让 TCP 连接的主动关闭方在它发送的 ACK 丢失的情况下重新发送最终的 ACK。
+主动关闭方重新发送的最终 ACK 并不是因为被动关闭方重传了 ACK（它们并不消耗序列号，被动关闭方也不会重传），而是因为被动关闭方重传了它的 FIN。事实上，被动关闭方总是重传 FIN 直到它收到一个最终的 ACK。
+```
+### 半关闭
+```
+当 TCP 链接中 A 向 B 发送 FIN 请求关闭，另一端 B 回应 ACK 之后（A 端进入 FIN_WAIT_2状态），并没有立即发送 FIN 给 A，A 方处于半连接状态（半开关），此时 A 可以接收 B 发送的数据，但是 A 已经不能再向 B 发送数据。
+```
+从程序的角度，可以使用 API 来控制实现半连接状态：
+```
+#include <sys/socket.h>
+int shutdown(int sockfd, int how);
+    sockfd: 需要关闭的socket的描述符
+    how: 允许为shutdown操作选择以下几种方式:
+SHUT_RD(0)： 关闭sockfd上的读功能，此选项将不允许sockfd进行读操作。
+    该套接字不再接收数据，任何当前在套接字接受缓冲区的数据将被无声的丢弃掉。
+SHUT_WR(1): 关闭sockfd的写功能，此选项将不允许sockfd进行写操作。进程不能在对此 套接字发出写操作。
+SHUT_RDWR(2):关闭sockfd的读写功能。相当于调用shutdown两次：首先是以SHUT_RD,然后以SHUT_WR。
+```
+使用 close 中止一个连接，但它只是减少描述符的引用计数，并不直接关闭连接，只有当描述符的引用
+计数为 0 时才关闭连接。shutdown 不考虑描述符的引用计数，直接关闭描述符。也可选择中止一个方
+向的连接，只中止读或只中止写。
+注意:
+1. 如果有多个进程共享一个套接字，close 每被调用一次，计数减 1 ，直到计数为 0 时，也就是所用
+进程都调用了 close，套接字将被释放。
+2. 在多进程中如果一个进程调用了 shutdown(sfd, SHUT_RDWR) 后，其它的进程将无法进行通信。
+但如果一个进程 close(sfd) 将不会影响到其它进程。
+
+
+## 8.端口复用
+端口复用最常用的用途是:
+- 防止服务器重启时之前绑定的端口还未释放
+- 程序突然退出而系统没有释放端口
+
+```
+#include <sys/types.h>
+#include <sys/socket.h>
+// 设置套接字的属性（不仅仅能设置端口复用）
+int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_toptlen);
+    参数：
+        - sockfd : 要操作的文件描述符
+        - level : 级别 - SOL_SOCKET (端口复用的级别)
+        - optname : 选项的名称
+            - SO_REUSEADDR
+            - SO_REUSEPORT
+        - optval : 端口复用的值（整形）
+            - 1 : 可以复用
+            - 0 : 不可以复用
+        - optlen : optval参数的大小
+端口复用，设置的时机是在服务器绑定端口之前。
+setsockopt();
+bind();
+```
+常看网络相关信息的命令
+- netstat
+    - 参数：
+        - -a 所有的socket
+        - -p 显示正在使用socket的程序的名称
+        - -n 直接使用IP地址，而不通过域名服务器
+
+# 三.IO多路复用
+## 1. I/O多路复用（I/O多路转接）
+I/O 多路复用使得程序能同时监听多个文件描述符，能够提高程序的性能，Linux 下实现 I/O 多路复用的系统调用主要有 select、poll 和 epoll。
+
+## 2. select
+主旨思想：
+1. 首先要构造一个关于文件描述符的列表，将要监听的文件描述符添加到该列表中。
+2. 调用一个系统函数，监听该列表中的文件描述符，直到这些描述符中的一个或者多个进行I/O
+操作时，该函数才返回。
+    - a.这个函数是阻塞
+    - b.函数对文件描述符的检测的操作是由内核完成的
+3. 在返回时，它会告诉进程有多少（哪些）描述符要进行I/O操作。
+```
+// sizeof(fd_set) = 128 1024
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/select.h>
+int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+    - 参数：
+        - nfds : 委托内核检测的最大文件描述符的值 + 1
+        - readfds : 要检测的文件描述符的读的集合，委托内核检测哪些文件描述符的读的属性
+            - 一般检测读操作
+            - 对应的是对方发送过来的数据，因为读是被动的接收数据，检测的就是读缓冲
+            区
+            - 是一个传入传出参数
+        - writefds : 要检测的文件描述符的写的集合，委托内核检测哪些文件描述符的写的属性
+            - 委托内核检测写缓冲区是不是还可以写数据（不满的就可以写）
+        - exceptfds : 检测发生异常的文件描述符的集合
+        - timeout : 设置的超时时间
+        struct timeval {
+            long tv_sec; /* seconds */
+            long tv_usec; /* microseconds */
+        };
+        - NULL : 永久阻塞，直到检测到了文件描述符有变化
+        - tv_sec = 0 tv_usec = 0， 不阻塞
+        - tv_sec > 0 tv_usec > 0， 阻塞对应的时间
+    - 返回值 :
+        - -1 : 失败
+        - >0(n) : 检测的集合中有n个文件描述符发生了变化
+
+// 将参数文件描述符fd对应的标志位设置为0
+void FD_CLR(int fd, fd_set *set);
+// 判断fd对应的标志位是0还是1， 返回值 ： fd对应的标志位的值，0，返回0， 1，返回1
+int FD_ISSET(int fd, fd_set *set);
+// 将参数文件描述符fd 对应的标志位，设置为1
+void FD_SET(int fd, fd_set *set);
+/ fd_set一共有1024 bit, 全部初始化为0
+void FD_ZERO(fd_set *set);
+```
+
+## 3.poll
+```
+#include <poll.h>
+struct pollfd {
+int fd; /* 委托内核检测的文件描述符 */
+    short events; /* 委托内核检测文件描述符的什么事件 */
+    short revents; /* 文件描述符实际发生的事件 */
+};
+struct pollfd myfd;
+myfd.fd = 5;
+myfd.events = POLLIN | POLLOUT;
+int poll(struct pollfd *fds, nfds_t nfds, int timeout);
+    - 参数：
+        - fds : 是一个struct pollfd 结构体数组，这是一个需要检测的文件描述符的集合
+        - nfds : 这个是第一个参数数组中最后一个有效元素的下标 + 1
+        - timeout : 阻塞时长
+        0 : 不阻塞
+        -1 : 阻塞，当检测到需要检测的文件描述符有变化，解除阻塞
+        >0 : 阻塞的时长
+    - 返回值：
+        -1 : 失败
+        >0（n） : 成功,n表示检测到集合中有n个文件描述符发生变化
+```
+### 4.epoll
+```
+#include <sys/epoll.h>
+// 创建一个新的epoll实例。在内核中创建了一个数据，这个数据中有两个比较重要的数据，一个是需要检测的文件描述符的信息（红黑树），还有一个是就绪列表，存放检测到数据发送改变的文件描述符信息（双向
+链表）。
+int epoll_create(int size);
+    - 参数：
+        size : 目前没有意义了。随便写一个数，必须大于0
+        - 返回值：
+        -1 : 失败
+        > 0 : 文件描述符，操作epoll实例的
+typedef union epoll_data {
+    void *ptr;
+    int fd;
+    uint32_t u32;
+    uint64_t u64;
+} epoll_data_t;
+struct epoll_event {
+    uint32_t events; /* Epoll events */
+    epoll_data_t data; /* User data variable */
+};
+常见的Epoll检测事件：
+    - EPOLLIN
+    - EPOLLOUT
+    - EPOLLERR
+    - EPOLLET
+// 对epoll实例进行管理：添加文件描述符信息，删除信息，修改信息
+int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
+    - 参数：
+        - epfd : epoll实例对应的文件描述符
+        - op : 要进行什么操作
+            EPOLL_CTL_ADD: 添加
+            EPOLL_CTL_MOD: 修改
+            EPOLL_CTL_DEL: 删除
+        - fd : 要检测的文件描述符
+        - event : 检测文件描述符什么事情
+// 检测函数
+int epoll_wait(int epfd, struct epoll_event *events, int maxevents, inttimeout);
+    - 参数：
+        - epfd : epoll实例对应的文件描述符
+        - events : 传出参数，保存了发送了变化的文件描述符的信息
+        - maxevents : 第二个参数结构体数组的大小
+        - timeout : 阻塞时间
+        - 0 : 不阻塞
+        - -1 : 阻塞，直到检测到fd数据发生变化，解除阻塞
+        - > 0 : 阻塞的时长（毫秒）
+    - 返回值：
+        - 成功，返回发送变化的文件描述符的个数 > 0
+        - 失败 -1
+```
+
+Epoll 的工作模式：
+- LT 模式 （水平触发）  
+假设委托内核检测读事件 -> 检测fd的读缓冲区
+读缓冲区有数据 - > epoll检测到了会给用户通知
+    - a.用户不读数据，数据一直在缓冲区，epoll 会一直通知
+    - b.用户只读了一部分数据，epoll会通知
+    - c.缓冲区的数据读完了，不通知
+```
+LT（level - triggered）是缺省的工作方式，并且同时支持 block 和 no-block socket。在这种做法中，内核告诉你一个文件描述符是否就绪了，然后你可以对这个就绪的 fd 进行 IO 操作。如果你不作任何操作，内核还是会继续通知你的。
+```
+- ET 模式（边沿触发）  
+假设委托内核检测读事件 -> 检测fd的读缓冲区
+读缓冲区有数据 - > epoll检测到了会给用户通知
+    - a.用户不读数据，数据一致在缓冲区中，epoll下次检测的时候就不通知了
+    - b.用户只读了一部分数据，epoll不通知
+    - c.缓冲区的数据读完了，不通知
+```
+ET（edge - triggered）是高速工作方式，只支持 no-block socket。在这种模式下，当描述符从未就绪变为就绪时，内核通过epoll告诉你。然后它会假设你知道文件描述符已经就绪，并且不会再为那个文件描述符发送更多的就绪通知，直到你做了某些操作导致那个文件描述符不再为就绪状态了。但是请注意，如果一直不对这个 fd 作 IO 操作（从而导致它再次变成未就绪），内核不会发送更多的通知（only once）。
+ET 模式在很大程度上减少了 epoll 事件被重复触发的次数，因此效率要比 LT 模式高。epoll工作在 ET 模式的时候，必须使用非阻塞套接口，以避免由于一个文件句柄的阻塞读/阻塞写操作把处理多个文件描述符的任务饿死。
+```
+
+# 四.UDP通信
+## 1.UDP
+```
+#include <sys/types.h>
+#include <sys/socket.h>
+ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,const struct sockaddr *dest_addr, socklen_t addrlen);
+    - 参数：
+        - sockfd : 通信的fd
+        - buf : 要发送的数据
+        - len : 发送数据的长度
+        - flags : 0
+        - dest_addr : 通信的另外一端的地址信息
+        - addrlen : 地址的内存大小
+ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,struct sockaddr *src_addr, socklen_t *addrlen);
+    - 参数：
+        - sockfd : 通信的fd
+        - buf : 接收数据的数组
+        - len : 数组的大小
+        - flags : 0
+        - src_addr : 用来保存另外一端的地址信息，不需要可以指定为NULL
+        - addrlen : 地址的内存大小
+```
+
+## 2.广播
+向子网中多台计算机发送消息，并且子网中所有的计算机都可以接收到发送方发送的消息，每个广播消息都包含一个特殊的IP地址，这个IP中子网内主机标志部分的二进制全部为1。
+ 
+a.只能在局域网中使用。
+
+b.客户端需要绑定服务器广播使用的端口，才可以接收到广播消息。
+```
+// 设置广播属性的函数
+int setsockopt(int sockfd, int level, int optname,const void *optval, socklen_toptlen);
+    - sockfd : 文件描述符
+    - level : SOL_SOCKET
+    - optname : SO_BROADCAST
+    - optval : int类型的值，为1表示允许广播
+    - optlen : optval的大小
+```
+## 3.组播（多播）
+单播地址标识单个 IP 接口，广播地址标识某个子网的所有 IP 接口，多播地址标识一组 IP 接口。单播和广播是寻址方案的两个极端（要么单个要么全部），多播则意在两者之间提供一种折中方案。多播数据报只应该由对它感兴趣的接口接收，也就是说由运行相应多播会话应用系统的主机上的接口接收。另外，广播一般局限于局域网内使用，而多播则既可以用于局域网，也可以跨广域网使用。
+
+a.组播既可以用于局域网，也可以用于广域网
+
+b.客户端需要加入多播组，才能接收到多播的数据
+```
+int setsockopt(int sockfd, int level, int optname,const void *optval,socklen_t optlen);
+// 服务器设置多播的信息，外出接口
+    - level : IPPROTO_IP
+    - optname : IP_MULTICAST_IF
+    - optval : struct in_addr
+// 客户端加入到多播组：
+    - level : IPPROTO_IP
+    - optname : IP_ADD_MEMBERSHIP
+    - optval : struct ip_mreq
+struct ip_mreq
+{
+    /* IP multicast address of group. */
+    struct in_addr imr_multiaddr; // 组播的IP地址
+    /* Local IP address of interface. */
+    struct in_addr imr_interface; // 本地的IP地址
+};
+typedef uint32_t in_addr_t;
+struct in_addr
+{
+    in_addr_t s_addr;
+};
+```
+## 4.本地套接字
+本地套接字的作用：本地的进程间通信
+
+有关系的进程间的通信
+
+没有关系的进程间的通信
+
+本地套接字实现流程和网络套接字类似，一般呢采用TCP的通信流程。
+```
+// 本地套接字通信的流程 - tcp
+// 服务器端
+1. 创建监听的套接字
+    int lfd = socket(AF_UNIX/AF_LOCAL, SOCK_STREAM, 0);
+2. 监听的套接字绑定本地的套接字文件 -> server端
+    struct sockaddr_un addr;
+    // 绑定成功之后，指定的sun_path中的套接字文件会自动生成。
+    bind(lfd, addr, len);
+3. 监听
+    listen(lfd, 100);
+4. 等待并接受连接请求
+    struct sockaddr_un cliaddr;
+    int cfd = accept(lfd, &cliaddr, len);
+5. 通信
+    接收数据：read/recv
+    发送数据：write/send
+6. 关闭连接
+    close();
+// 客户端的流程
+1. 创建通信的套接字
+    int fd = socket(AF_UNIX/AF_LOCAL, SOCK_STREAM, 0);
+2. 监听的套接字绑定本地的IP 端口
+    struct sockaddr_un addr;
+    // 绑定成功之后，指定的sun_path中的套接字文件会自动生成。
+    bind(lfd, addr, len);
+3. 连接服务器
+    struct sockaddr_un serveraddr;
+    connect(fd, &serveraddr, sizeof(serveraddr));
+4. 通信
+    接收数据：read/recv
+    发送数据：write/send
+5. 关闭连接
+    close();
+```
+```
+// 头文件: sys/un.h
+#define UNIX_PATH_MAX 108
+struct sockaddr_un {
+    sa_family_t sun_family; // 地址族协议 af_local
+    char sun_path[UNIX_PATH_MAX]; // 套接字文件的路径, 这是一个伪文件, 大小永远=0
+};
+```
