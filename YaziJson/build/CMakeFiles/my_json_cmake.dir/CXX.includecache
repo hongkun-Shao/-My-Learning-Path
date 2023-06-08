@@ -1,0 +1,46 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../include/json.h
+string
+-
+vector
+-
+unordered_map
+-
+
+../include/parser.h
+json.h
+../include/json.h
+string
+-
+
+/home/showcode/json/main.cpp
+iostream
+-
+json.h
+/home/showcode/json/json.h
+fstream
+-
+sstream
+-
+
+/home/showcode/json/src/json.cpp
+json.h
+/home/showcode/json/src/json.h
+parser.h
+/home/showcode/json/src/parser.h
+iostream
+-
+sstream
+-
+
+/home/showcode/json/src/parser.cpp
+parser.h
+/home/showcode/json/src/parser.h
+

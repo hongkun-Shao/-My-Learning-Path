@@ -1,0 +1,17 @@
+[
+{
+  "directory": "/home/showcode/json/build",
+  "command": "/usr/bin/g++   -I/home/showcode/json/include   -std=c++11 -g   -o CMakeFiles/my_json_cmake.dir/main.cpp.o -c /home/showcode/json/main.cpp",
+  "file": "/home/showcode/json/main.cpp"
+},
+{
+  "directory": "/home/showcode/json/build",
+  "command": "/usr/bin/g++   -I/home/showcode/json/include   -std=c++11 -g   -o CMakeFiles/my_json_cmake.dir/src/json.cpp.o -c /home/showcode/json/src/json.cpp",
+  "file": "/home/showcode/json/src/json.cpp"
+},
+{
+  "directory": "/home/showcode/json/build",
+  "command": "/usr/bin/g++   -I/home/showcode/json/include   -std=c++11 -g   -o CMakeFiles/my_json_cmake.dir/src/parser.cpp.o -c /home/showcode/json/src/parser.cpp",
+  "file": "/home/showcode/json/src/parser.cpp"
+}
+]

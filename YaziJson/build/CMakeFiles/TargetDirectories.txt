@@ -1,0 +1,3 @@
+/home/showcode/json/build/CMakeFiles/rebuild_cache.dir
+/home/showcode/json/build/CMakeFiles/my_json_cmake.dir
+/home/showcode/json/build/CMakeFiles/edit_cache.dir
