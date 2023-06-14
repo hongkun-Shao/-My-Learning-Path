@@ -1,3 +1,13 @@
+/*------------------------------------------------------------------------------------------------------------------
+需要注意理解的地方
+    HTTP协议的格式；
+    parse系列函数以及里面的字符串操作函数;
+    file相关的函数;
+    unmap();
+    writev();
+    epoll相关的函数;
+    还有一些相关宏定义的概念；
+------------------------------------------------------------------------------------------------------------------*/
 #include "http_conn.h"
 
 // 定义HTTP响应的一些状态信息
@@ -12,7 +22,7 @@ const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the requested file.\n";
 
 // 网站的根目录
-const char* doc_root = "/home/nowcoder/webserver/resources";
+const char* doc_root = "/home/showcode/webserver/resources";
 
 int setnonblocking( int fd ) {
     int old_option = fcntl( fd, F_GETFL );
@@ -392,7 +402,8 @@ bool http_conn::add_response( const char* format, ... ) {
     }
     va_list arg_list;
     va_start( arg_list, format );
-    int len = vsnprintf( m_write_buf + m_write_idx, WRITE_BUFFER_SIZE - 1 - m_write_idx, format, arg_list );
+    int len = vsnprintf( m_write_buf + m_write_idx, 
+    WRITE_BUFFER_SIZE - 1 - m_write_idx, format, arg_list );
     if( len >= ( WRITE_BUFFER_SIZE - 1 - m_write_idx ) ) {
         return false;
     }

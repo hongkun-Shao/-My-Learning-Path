@@ -55,15 +55,18 @@ public:
     // 从状态机的三种可能状态，即行的读取状态，分别表示
     // 1.读取到一个完整的行 2.行出错 3.行数据尚且不完整
     enum LINE_STATUS { LINE_OK = 0, LINE_BAD, LINE_OPEN };
+
 public:
     http_conn(){}
     ~http_conn(){}
+
 public:
     void init(int sockfd, const sockaddr_in& addr); // 初始化新接受的连接
     void close_conn();  // 关闭连接
     void process(); // 处理客户端请求
     bool read();// 非阻塞读
     bool write();// 非阻塞写
+
 private:
     void init();    // 初始化连接
     HTTP_CODE process_read();    // 解析HTTP请求
@@ -93,8 +96,8 @@ public:
     static int m_user_count;    // 统计用户的数量
 
 private:
-    int m_sockfd;           // 该HTTP连接的socket和对方的socket地址
-    sockaddr_in m_address;
+    int m_sockfd;           // 该HTTP连接的socket
+    sockaddr_in m_address;  // 对方的socket地址
     
     char m_read_buf[ READ_BUFFER_SIZE ];    // 读缓冲区
     int m_read_idx;                         // 标识读缓冲区中已经读入的客户端数据的最后一个字节的下一个位置
@@ -123,3 +126,12 @@ private:
 };
 
 #endif
+/*------------------------------------------------------------------------------------------------------------------
+需要注意理解的地方
+    parse系列函数以及里面的字符串操作函数;
+    file相关的函数;
+    unmap();
+    writev();
+    epoll相关的函数;
+    还有一些相关宏定义的概念；
+------------------------------------------------------------------------------------------------------------------*/

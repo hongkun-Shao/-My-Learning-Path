@@ -1,0 +1,1 @@
+/usr/bin/c++   -std=c++11 -Wall -pthread  -rdynamic CMakeFiles/my_cmake.dir/main.cpp.o CMakeFiles/my_cmake.dir/src/http_conn.cpp.o  -o my_cmake 

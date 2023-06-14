@@ -119,8 +119,8 @@ int main( int argc, char* argv[] ) {
         }
     }
     
-    close( epollfd );
-    close( listenfd );
+    close(epollfd);
+    close(listenfd);
     delete [] users;
     delete pool;
     return 0;
